@@ -10,6 +10,14 @@ interface VocabSummaryModalProps {
   songTitle?: string;
 }
 
+const JLPT_COLORS: Record<string, string> = {
+  N1: 'bg-rose-500/15 border-rose-500/40 text-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.15)]',
+  N2: 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.15)]',
+  N3: 'bg-sky-500/15 border-sky-500/40 text-sky-300 shadow-[0_0_8px_rgba(14,165,233,0.15)]',
+  N4: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.15)]',
+  N5: 'bg-purple-500/15 border-purple-500/40 text-purple-300 shadow-[0_0_8px_rgba(168,85,247,0.15)]',
+};
+
 export const VocabSummaryModal: React.FC<VocabSummaryModalProps> = ({
   isOpen,
   onClose,
@@ -143,53 +151,77 @@ export const VocabSummaryModal: React.FC<VocabSummaryModalProps> = ({
               此篩選條件下沒有對應的單字。
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {filteredVocab.map((item, idx) => (
-                <div
-                  key={`sum-${idx}`}
-                  className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 transition flex flex-col justify-between"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {filteredVocab.map((item, idx) => {
+                const jlptStyle =
+                  (item.jlpt && JLPT_COLORS[item.jlpt]) ||
+                  'bg-slate-800 border-slate-700 text-slate-300';
+
+                return (
+                  <div
+                    key={`sum-${idx}`}
+                    className="p-3.5 rounded-2xl bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-500/10 hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between"
+                  >
                     <div>
-                      <div className="font-bold text-white text-base leading-relaxed">
-                        <VocabRubyText word={item.word} reading={item.reading} />
+                      {/* 單字讀音與 JLPT 等級 */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="font-bold text-white text-base sm:text-lg leading-relaxed tracking-wide">
+                          <VocabRubyText word={item.word} reading={item.reading} />
+                        </div>
+                        {item.jlpt && (
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm shrink-0 ${jlptStyle}`}
+                          >
+                            {item.jlpt}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+
+                      {/* 詞性、活用、原形 */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
                         {item.pos && (
-                          <span className="text-[10px] font-medium text-cyan-300 bg-cyan-950/70 border border-cyan-800/60 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-semibold text-cyan-300 bg-cyan-950/80 border border-cyan-700/60 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0"></span>
                             {item.pos}
                           </span>
                         )}
                         {item.conjugation && item.conjugation !== '無活用' && (
-                          <span className="text-[10px] text-amber-300 bg-amber-950/70 border border-amber-800/60 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-medium text-amber-300 bg-amber-950/80 border border-amber-700/60 px-2 py-0.5 rounded-md shadow-sm">
                             活用：{item.conjugation}
                           </span>
                         )}
                         {item.baseForm && item.baseForm !== item.word && (
-                          <span className="text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
-                            原形：<span className="text-slate-200">{item.baseForm}</span>
+                          <span className="text-[10px] text-slate-300 bg-slate-900 border border-slate-700/70 px-2 py-0.5 rounded-md">
+                            原形：<span className="text-white font-medium">{item.baseForm}</span>
                           </span>
                         )}
                       </div>
+
+                      {/* 文法機能 */}
+                      {item.function && (
+                        <div className="text-[11px] text-indigo-200 bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-800/50 mb-2 shadow-sm leading-relaxed">
+                          <span className="font-semibold text-indigo-400 mr-1.5">用法機能：</span>
+                          {item.function}
+                        </div>
+                      )}
                     </div>
-                    {item.jlpt && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
-                        {item.jlpt}
-                      </span>
-                    )}
-                  </div>
-                  {item.function && (
-                    <div className="text-[10px] text-indigo-300 bg-indigo-950/30 px-2 py-1 rounded border border-indigo-900/40 my-1">
-                      <span className="text-indigo-400 font-semibold mr-1">用法：</span>
-                      {item.function}
+
+                    {/* 中文釋義 */}
+                    <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/70 shadow-inner my-1">
+                      <span className="text-slate-400 text-[10px] block mb-0.5 font-sans font-semibold">中文釋義</span>
+                      <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed">
+                        {item.meaning}
+                      </p>
                     </div>
-                  )}
-                  <p className="text-xs text-slate-200 font-medium mb-1.5">{item.meaning}</p>
-                  <div className="text-[11px] text-slate-400 truncate border-t border-slate-900 pt-1">
-                    例句：{item.sentence}
+
+                    {/* 出現原句 */}
+                    <div className="text-[11px] text-slate-400 truncate border-t border-slate-800/80 pt-2 mt-1">
+                      <span className="text-slate-500 mr-1">出處：</span>
+                      <span>{item.sentence}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

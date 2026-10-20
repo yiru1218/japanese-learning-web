@@ -23,7 +23,9 @@ export interface VocabItem {
 export interface GrammarItem {
   pattern: string;
   explanation: string;
+  meaning?: string; // 句中文法簡短中文意思 (如: 命令/住手、如同/以便、漸漸/持續)
   target?: string; // 句中對應文字片段，如 "ように"、"てゆく"、"だけの"
+  jlpt?: 'N1' | 'N2' | 'N3' | 'N4' | 'N5' | string; // 文法等級標記
 }
 
 export interface AnalyzedLine {

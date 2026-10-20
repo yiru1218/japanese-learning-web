@@ -54,7 +54,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                     setCurrentSec(sec);
                     onTimeUpdate?.(sec);
                   }
-                }, 250);
+                }, 100);
               } else {
                 setIsPlaying(false);
                 if (intervalRef.current) {

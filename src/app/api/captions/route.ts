@@ -51,12 +51,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 格式化字幕資料
-    const lines = transcripts.map((t) => ({
-      text: t.text.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"'),
-      timestamp: Math.round(t.offset / 1000), // 轉成秒數
-      duration: Math.round(t.duration / 1000),
-    }));
+    // 格式化字幕資料，並過濾掉純音效標記 (如 [音樂]、[音楽]、[Music]、[拍手] 等)
+    const soundMarkerRegex = /^[\s\[\(（【]*(?:音樂|音楽|Music|拍手|Applause|鼓掌|欢呼|歓声|laughter|bgm)[\s\]\)）】]*$/i;
+    const inlineSoundRegex = /\[(?:音樂|音楽|Music|拍手|Applause|鼓掌|欢呼|歓声|laughter|bgm)\]|\((?:音樂|音楽|Music|拍手|Applause|鼓掌|欢呼|歓声|laughter|bgm)\)|（(?:音樂|音楽|Music|拍手|Applause|鼓掌|欢呼|歓声|laughter|bgm)）/gi;
+
+    const lines = transcripts
+      .map((t) => {
+        const cleanedText = t.text
+          .replace(/&amp;/g, '&')
+          .replace(/&#39;/g, "'")
+          .replace(/&quot;/g, '"')
+          .replace(inlineSoundRegex, '')
+          .trim();
+        return {
+          text: cleanedText,
+          timestamp: Math.round(t.offset / 1000), // 轉成秒數
+          duration: Math.round(t.duration / 1000),
+        };
+      })
+      .filter((l) => l.text.length > 0 && !soundMarkerRegex.test(l.text));
 
     return NextResponse.json({
       success: true,

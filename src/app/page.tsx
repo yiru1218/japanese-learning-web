@@ -387,15 +387,19 @@ export default function HomePage() {
   }, [currentSong.lines]);
 
   // 根據左側 YouTube 播放秒數，即時匹配右側歌詞（實現聚焦同步）
+  // 加入 0.45 秒預先聚焦補償 (Lead Time)，消除音訊播放與卡片滾動的延遲感，讓人聲開口前瞬間就已對齊卡片
   const activeLineId = useMemo(() => {
     if (currentPlaybackTime <= 0 || !currentSong.lines?.length) return null;
+
+    const LEAD_TIME = 0.45; // 提早 0.45 秒聚焦
+    const effectiveTime = currentPlaybackTime + LEAD_TIME;
 
     let matchedId: string | null = null;
     let closestTime = -1;
 
     for (const line of currentSong.lines) {
       for (const ts of line.timestamps || []) {
-        if (currentPlaybackTime >= ts && ts > closestTime) {
+        if (effectiveTime >= ts && ts > closestTime) {
           closestTime = ts;
           matchedId = line.id;
         }
@@ -535,11 +539,10 @@ export default function HomePage() {
                   type="button"
                   onClick={() => setAutoScrollFollow(!autoScrollFollow)}
                   title={autoScrollFollow ? '點擊暫停自動滾動聚焦' : '點擊開啟播放自動滾動聚焦'}
-                  className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition ${
-                    autoScrollFollow
+                  className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition ${autoScrollFollow
                       ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 font-medium'
                       : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
-                  }`}
+                    }`}
                 >
                   <Compass className={`w-3.5 h-3.5 ${autoScrollFollow ? 'animate-spin' : ''}`} style={{ animationDuration: '8s' }} />
                   <span>{autoScrollFollow ? '聚焦跟隨中' : '跟隨已暫停'}</span>
@@ -548,11 +551,10 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setShowOnlyBookmarks(!showOnlyBookmarks)}
-                  className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition ${
-                    showOnlyBookmarks
+                  className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition ${showOnlyBookmarks
                       ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 font-medium'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <Bookmark className="w-3.5 h-3.5 fill-current" />
                   <span>已收藏 ({bookmarkedIds.size})</span>
