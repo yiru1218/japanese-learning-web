@@ -138,6 +138,63 @@ export default function HomePage() {
     });
   };
 
+  // 批次分析歌詞（每批 6 句，兼具高解析度、杜絕 Token 截斷與防止雲端平台超時）
+  const analyzeLinesInBatches = async (
+    deduplicatedLines: { original: string; occurrences: number; timestamps: number[] }[],
+    userApiKey?: string,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<{ lines: AnalyzedLine[]; warning?: string; warningMessage?: string }> => {
+    const BATCH_SIZE = 6;
+    const total = deduplicatedLines.length;
+    const allAnalyzed: AnalyzedLine[] = [];
+    let detectedWarning = '';
+    let detectedWarningMsg = '';
+
+    for (let i = 0; i < total; i += BATCH_SIZE) {
+      const chunk = deduplicatedLines.slice(i, i + BATCH_SIZE);
+      const currentBatchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(total / BATCH_SIZE);
+
+      if (onProgress) {
+        onProgress(i, total);
+      }
+
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lines: chunk,
+          apiKey: userApiKey || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `第 ${currentBatchNum}/${totalBatches} 批歌詞分析失敗`);
+      }
+
+      if (data.warning && !detectedWarning) {
+        detectedWarning = data.warning;
+        detectedWarningMsg = data.message;
+      }
+
+      if (Array.isArray(data.analyzedLines)) {
+        allAnalyzed.push(...data.analyzedLines);
+      }
+    }
+
+    if (onProgress) {
+      onProgress(total, total);
+    }
+
+    return {
+      lines: allAnalyzed,
+      warning: detectedWarning,
+      warningMessage: detectedWarningMsg,
+    };
+  };
+
   // 1. YouTube 網址分析流程
   const handleAnalyzeUrl = async (url: string) => {
     setIsLoading(true);
@@ -180,7 +237,7 @@ export default function HomePage() {
             lines: [],
           });
           setErrorMessage(
-            '此 YouTube 影片未開放 CC 字幕軌（許多音樂錄影帶 MV 是畫面硬字幕）。建議切換為「手動貼上歌詞」模式，同樣可即時完成去重與深度解析！'
+            '此 YouTube 影片未開放 CC 字幕軌（許多音樂錄影帶 MV 是畫面硬字幕，或受雲端防爬蟲限制）。建議切換為「手動貼上歌詞」模式，同樣可即時完成去重與深度解析！'
           );
           setIsLoading(false);
           setStatusMessage('');
@@ -195,22 +252,21 @@ export default function HomePage() {
       // 步驟二：去重處理
       const deduplicated = deduplicateLines(rawLines);
       setStatusMessage(
-        `去重完成！原歌詞 ${rawLines.length} 行，精煉為 ${deduplicated.length} 句不重複歌詞。正在由 AI 分析單字與文法...`
+        `去重完成！原歌詞 ${rawLines.length} 行，精煉為 ${deduplicated.length} 句不重複歌詞。正在啟動分批 AI 解析...`
       );
 
-      // 步驟三：呼叫 AI 進行逐句詳細解析
-      const analyzeRes = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lines: deduplicated,
-          apiKey: apiKey || undefined,
-        }),
-      });
-
-      const analyzeData = await analyzeRes.json();
-
-      if (analyzeData.error) {
+      // 步驟三：呼叫 AI 進行逐句詳細解析 (分批並更新進度)
+      let analyzedResult: { lines: AnalyzedLine[]; warning?: string; warningMessage?: string };
+      try {
+        analyzedResult = await analyzeLinesInBatches(
+          deduplicated,
+          apiKey || undefined,
+          (done, total) => {
+            const pct = Math.round((done / total) * 100);
+            setStatusMessage(`正在由 AI 深入分析單字與文法... (${done}/${total} 句, ${pct}%)`);
+          }
+        );
+      } catch (analyzeErr) {
         // 依然保留已成功抓到的歌詞與時間戳，讓播放器與時間軸仍能正常操作
         setCurrentSong({
           videoId,
@@ -224,8 +280,8 @@ export default function HomePage() {
             furigana: d.original,
             romaji: '',
             translation: {
-              literal: '（AI 伺服器尖峰繁忙中，可點擊再次重試）',
-              poetic: '（AI 伺服器尖峰繁忙中，可點擊再次重試）',
+              literal: '（AI 分析未完全結束，可再次點擊重試）',
+              poetic: '（AI 分析未完全結束，可再次點擊重試）',
             },
             vocabulary: [],
             grammar: [],
@@ -234,10 +290,10 @@ export default function HomePage() {
             timestamps: d.timestamps,
           })),
         });
-        throw new Error(analyzeData.error);
+        throw analyzeErr;
       }
 
-      const lines: AnalyzedLine[] = analyzeData.analyzedLines || [];
+      const lines: AnalyzedLine[] = analyzedResult.lines;
 
       const newSong: SongData = {
         id: `yt-${videoId}`,
@@ -253,8 +309,8 @@ export default function HomePage() {
       setCurrentSong(newSong);
       saveSongToHistory(newSong);
 
-      if (analyzeData.warning === 'NO_API_KEY') {
-        setErrorMessage(analyzeData.message);
+      if (analyzedResult.warning === 'NO_API_KEY') {
+        setErrorMessage(analyzedResult.warningMessage || '未檢測到 API Key');
       }
     } catch (err: unknown) {
       console.error(err);
@@ -300,25 +356,19 @@ export default function HomePage() {
       }
 
       setStatusMessage(
-        `去重完成！原歌詞共 ${rawLines.length} 行，精煉為 ${deduplicated.length} 句不重複歌詞。正在連線 AI 解析中...`
+        `去重完成！原歌詞共 ${rawLines.length} 行，精煉為 ${deduplicated.length} 句不重複歌詞。正在啟動分批 AI 解析...`
       );
 
-      const analyzeRes = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lines: deduplicated,
-          apiKey: apiKey || undefined,
-        }),
-      });
+      const analyzedResult = await analyzeLinesInBatches(
+        deduplicated,
+        apiKey || undefined,
+        (done, total) => {
+          const pct = Math.round((done / total) * 100);
+          setStatusMessage(`正在由 AI 深入分析單字與文法... (${done}/${total} 句, ${pct}%)`);
+        }
+      );
 
-      const analyzeData = await analyzeRes.json();
-
-      if (analyzeData.error) {
-        throw new Error(analyzeData.error);
-      }
-
-      const lines: AnalyzedLine[] = analyzeData.analyzedLines || [];
+      const lines: AnalyzedLine[] = analyzedResult.lines;
 
       const newSong: SongData = {
         id: `manual-${Date.now()}`,
@@ -334,8 +384,8 @@ export default function HomePage() {
       setCurrentSong(newSong);
       saveSongToHistory(newSong);
 
-      if (analyzeData.warning === 'NO_API_KEY') {
-        setErrorMessage(analyzeData.message);
+      if (analyzedResult.warning === 'NO_API_KEY') {
+        setErrorMessage(analyzedResult.warningMessage || '未檢測到 API Key');
       }
     } catch (err: unknown) {
       console.error(err);

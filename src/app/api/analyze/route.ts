@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AnalyzedLine } from '@/types';
 
+export const maxDuration = 60; // 允許 Serverless Function 執行長度 (最高 60 秒)
+
 interface InputLine {
   original: string;
   occurrences: number;
@@ -164,13 +166,23 @@ ${JSON.stringify(lines.map((l, idx) => ({ index: idx, text: l.original })))}
   }
 
   const data = await res.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const candidate = data?.candidates?.[0];
+  const rawText = candidate?.content?.parts?.[0]?.text;
   if (!rawText) {
     throw new Error('Gemini API 未回傳內容');
   }
 
   const cleanedJson = rawText.trim().replace(/^```json/i, '').replace(/```$/i, '').trim();
-  const parsedItems = JSON.parse(cleanedJson);
+  let parsedItems: any = null;
+  try {
+    parsedItems = JSON.parse(cleanedJson);
+  } catch (parseErr) {
+    console.error('JSON parse error. Length:', cleanedJson.length, 'finishReason:', candidate?.finishReason);
+    if (candidate?.finishReason === 'MAX_TOKENS' || cleanedJson.length > 30000) {
+      throw new Error('AI 回傳內容超出 Token 上限導致格式截斷。系統將自動採用較小批次重試。');
+    }
+    throw new Error(`JSON 解析失敗: ${parseErr instanceof Error ? parseErr.message : '格式不合規'}`);
+  }
 
   // 將 AI 分析結果與原始時間戳與出現次數組裝
   return lines.map((originalLine, idx) => {
@@ -266,7 +278,7 @@ async function getAvailableModels(apiKey: string): Promise<string[]> {
     console.warn('動態獲取 Gemini 模型列表失敗，使用預設值:', e);
   }
 
-  // 預設兜底清單
-  return ['gemini-3.8-flash'];
+  // 預設兜底清單 (官方標準主流模型)
+  return ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 }
 
